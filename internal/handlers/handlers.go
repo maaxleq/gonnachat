@@ -3,16 +3,18 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"github.com/goombaio/namegenerator"
 	"gonnachat/internal/chatroom"
+	"gonnachat/internal/namegenerator"
 	"log"
 	"net/http"
 	"nhooyr.io/websocket"
-	"time"
 )
 
 var room = chatroom.NewChatRoom()
-var nameGenerator = namegenerator.NewNameGenerator(time.Now().UTC().UnixNano())
+
+func MutexState(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(fmt.Sprintf("Write locked : %t / Read locked : %t", room.Locked(), room.RLocked())))
+}
 
 func WSChat(w http.ResponseWriter, r *http.Request) {
 	// Upgrade the HTTP connection to a WebSocket connection
@@ -32,11 +34,11 @@ func WSChat(w http.ResponseWriter, r *http.Request) {
 
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		name = nameGenerator.Generate()
+		name = namegenerator.Generate()
 	} else {
 		if !room.IsNameAvailable(name) {
 			oldName := name
-			name = nameGenerator.Generate()
+			name = namegenerator.Generate()
 			err := conn.Write(ctx, websocket.MessageText, []byte(fmt.Sprintf("# name %s is already taken, taking %s instead", oldName, name)))
 			if err != nil {
 				log.Printf("failed to write message: %v", err)

@@ -68,7 +68,7 @@ func NewChatRoom() *ChatRoom {
 	go func() {
 		for {
 			msg := <-chatRoom.listener
-			chatRoom.handleMessage(msg)
+			go chatRoom.handleMessage(msg)
 		}
 	}()
 
@@ -120,6 +120,16 @@ func (room *ChatRoom) handleCommand(originalMsg Message, cmd Command) {
 	}
 }
 
+func (room *ChatRoom) RLocked() bool {
+	defer room.rwLock.RUnlock()
+	return !room.rwLock.TryRLock()
+}
+
+func (room *ChatRoom) Locked() bool {
+	defer room.rwLock.Unlock()
+	return !room.rwLock.TryLock()
+}
+
 func (room *ChatRoom) handleMessage(msg Message) {
 	if strings.HasPrefix(msg.Content, "/") {
 		cmdString := strings.TrimPrefix(msg.Content, "/")
@@ -148,10 +158,14 @@ func (room *ChatRoom) Say(name string, content string) {
 }
 
 func (room *ChatRoom) Subscribe(name string) chan Message {
-	room.rwLock.Lock()
-	sender := make(chan Message, msgBufferSize)
-	room.senders[name] = sender
-	room.rwLock.Unlock()
+	var sender chan Message
+
+	func() {
+		room.rwLock.Lock()
+		defer room.rwLock.Unlock()
+		sender = make(chan Message, msgBufferSize)
+		room.senders[name] = sender
+	}()
 
 	room.broadcast(Message{
 		Type:    ServerMessage,
@@ -162,9 +176,11 @@ func (room *ChatRoom) Subscribe(name string) chan Message {
 }
 
 func (room *ChatRoom) Unsubscribe(name string) {
-	room.rwLock.Lock()
-	delete(room.senders, name)
-	room.rwLock.Unlock()
+	func() {
+		room.rwLock.Lock()
+		defer room.rwLock.Unlock()
+		delete(room.senders, name)
+	}()
 
 	room.broadcast(Message{
 		Type:    ServerMessage,

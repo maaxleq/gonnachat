@@ -6,6 +6,7 @@ import (
 	"gonnachat/internal/handlers"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 )
 
@@ -19,6 +20,8 @@ func main() {
 
 	r := chi.NewRouter()
 
+	r.Mount("/debug/pprof", http.DefaultServeMux)
+	r.Get("/mutex", handlers.MutexState)
 	r.Get("/ws", handlers.WSChat)
 
 	log.Printf("Server starting on port %s", port)
